@@ -8,6 +8,8 @@ library(RColorBrewer)
 library(randomForest)
 library(plotly)
 library(data.table)
+library(dplyr)
+
 
 #import existing a new products dataset
 existingproducts <- read.csv("C:\\Users\\Javier Villasmil\\Desktop\\Ubiqum\\Task 06 - Multiple Regression in R\\existingproductattributes2017.2.csv")
@@ -28,15 +30,14 @@ table(newproducts$ProductType)
 
 #remove the column BestSellerRank  - it has 15 missing values and the values makes no sense whatosever.
 existingproducts$BestSellersRank <- NULL
-newproducts$BestSellersRank <- NULL
 
 #remove the column ProductNum  - because it's just an identifier.
 existingproducts$ProductNum <- NULL
-newproducts$ProductNum <- NULL
 
 #random forest - to check meaninful realationships between variables
 set.seed(123)
 rf <- train(Volume ~ ., data = existingproducts, method = "rf", importance = TRUE)
+rf
 
 #save the results of the weighting after the first randomforest
 varweights <- varImp(rf) 
@@ -46,18 +47,191 @@ varweights
 dfweights <- data.frame(varweights$importance) 
 dfweights
 
-#linearmodel of x5StarsRating against Volume
-lm <- lm(x5StarReviews ~ Volume, existingproducts)
-summary(lm)
-#In summary.lm(lm) : essentially perfect fit: summary may be unreliable#
-#remove x5StarReviews#
-existingproducts$x5StarReviews <- NULL
-newproducts$x5StarReviews <- NULL
 
-#run a second random forest without the variables removed to check the new weights
+#order the index of each variable according the relevance - decreasing
+indicesorden <- order(dfweights$Overall, decreasing = TRUE)
+indicesorden
+
+#selectiong the the most significant vairiable according to a RF model using all attributes
+for (i in indicesorden){
+  if (dfweights$Overall[i] == 100){
+    mostimportantant <- (rownames(dfweights)[i])
+    n <- names(existingproducts)
+    nameindex <- which(n == mostimportantant)
+  }
+}
+
+mostimportantant
+existingproducts[,nameindex]
+
+#linearmodel of "THE MOST IMPORTANT VARIABLE" against Volume
+lm <- lm(existingproducts[,nameindex] ~ Volume, existingproducts)
+summary(lm)
+
+#In summary.lm(lm) : essentially perfect fit: summary may be unreliable#
+#remove x5StarReviews since its perfectly correlated to volume#
+existingproducts$x5StarReviews <- NULL
+
+#remove ProductType because there are few rows and many products, it's not accurate use this variable as a predictor.
+existingproducts$ProductType <- NULL
+
+#Check a correlation matrix for possible linear relationships between independent variables.
+cormatrix <- cor(existingproducts) 
+res2 <- cor.mtest(existingproducts, conf.level = .95)
+corrplot(cormatrix, method = "square",p.mat = res2$p, sig.level = .2,tl.col = "black", tl.cex = 0.8, cl.cex = 0.8)
+corrplot(cormatrix, method = "number",p.mat = res2$p, sig.level = .2, tl.col = "black", tl.cex = 0.8, cl.cex = 0.8, number.cex = 0.8)
+
+#removing independent variables with high correlation
+existingproducts$x3StarReviews <- NULL
+existingproducts$x1StarReviews <- NULL
+existingproducts$NegativeServiceReview <- NULL
+
+#checking a decision tree
 set.seed(123)
-rf <- train(Volume ~ ., data = existingproducts, method = "rf", importance = TRUE)
-varweights <- varImp(rf) 
+rp <- rpart(Volume ~ ., existingproducts)
+summary(rp)
+rpart.plot(rp, type = 1)
+
+#removing independent variables with no importance in the decistion tree
+existingproducts$x3StarReviews <- NULL
+existingproducts$x1StarReviews <- NULL
+existingproducts$NegativeServiceReview <- NULL
+existingproducts$ShippingWeight <- NULL
+existingproducts$ProductHeight <- NULL
+existingproducts$Price <- NULL
+existingproducts$Recommendproduct <- NULL
+
+
+###################################### not working ###################################################
+#control <- rfeControl(functions = rfFuncs, method = "repatedCV", repeats = 3)
+#outcome <- "Volume"
+#theprediction <-  names(existingproducts)[!names(existingproducts)%in%outcome]
+#pred_profile <- rfe(existingproducts[,theprediction],existingproducts[,outcome], rfeControl = control)
+###################################### not working ###################################################
+
+#Removing Outliers#
+p <- plot_ly(data = existingproducts, type = "scatter", x = ~ x4StarReviews, y = ~Volume, mode = 'markers', name = "Reviews") %>% add_trace("scatter", x = ~ x2StarReviews, y = ~Volume,name = "2 Stars Review") %>% add_trace("scatter", x = ~ PositiveServiceReview, y = ~Volume, name = "Positive Service Review") %>% layout(title = 'Styled Scatter',
+       yaxis = list(zeroline = FALSE),
+       xaxis = list(zeroline = FALSE))
+p
+
+#removes volumes over 7000 units
+existingproducts <- anti_join(existingproducts, subset(existingproducts, Volume>7000))
+#removes repeated warranties
+existingproducts <- rbind(existingproducts[1:34,], existingproducts[42:78,])
+
+#train and test sets
+set.seed(123)
+trainingindices <- createDataPartition(existingproducts$Volume, p = 0.80, list = FALSE)
+
+training <- existingproducts[trainingindices,]
+testing  <- existingproducts[-trainingindices,]
+
+#checking quartiles
+b <- plot_ly(y = training$Volume, type = "box", name = "Training") %>%
+  add_trace(y = testing$Volume, name ="Testing")
+b
+
+#Training with several variables.
+set.seed(123)
+control <- trainControl(method="repeatedcv", number=10, repeats=3)
+str(existingproducts)
+traininglist1 <- existingproducts[c(7,1)]
+traininglist2 <- existingproducts[c(7,1,2)]
+traininglist3 <- existingproducts[c(7,1,2,3)]
+traininglist4 <- existingproducts[c(7,1,2,3,4)]
+traininglist5 <- existingproducts[c(7,1,2,3,4,5)]
+traininglist6 <- existingproducts[c(7,1,2,3,4,5,6)]
+
+traininglist1
+traininglist2
+traininglist3
+traininglist4
+traininglist5
+traininglist6
+
+#list with all training sets
+traininglist <- list(traininglist1,traininglist2,traininglist3,traininglist4,traininglist5,traininglist6)
+traininglist
+
+length(traininglist)
+resultsRF <- c()
+resultsSVM <- c()
+resultsGBM <- c()
+
+#Train Control for the models
+control <- trainControl(method="repeatedcv", number=10, repeats=3)
+
+#RANDOM FOREST
+for (i in 1:length(traininglist)){
+  set.seed(123)
+  rf <- train(Volume ~ ., data = data.frame(traininglist[i]), method = "rf", trainControl = control, importance = TRUE, preProcess=c("center","scale"), tuneLenght=15)
+  prediction1 <- predict(rf,testing)
+  performance1 <- postResample(prediction1,testing$Volume)
+  resultsRF <- cbind(resultsRF,performance1)
+}
+
+resultsRF
+
+#SVM
+for (i in 1:length(traininglist)){
+  set.seed(123)
+  rf <- train(Volume ~ ., data = data.frame(traininglist[i]), method = "svmRadial", trainControl = control, importance = TRUE, preProcess=c("center","scale"), tuneLenght=15)
+  prediction1 <- predict(rf,testing)
+  performance1 <- postResample(prediction1,testing$Volume)
+  resultsSVM <- cbind(resultsSVM,performance1)
+}
+
+resultsSVM
+
+#GBM
+for (i in 6:length(traininglist)){
+  set.seed(123)
+  rf <- train(Volume ~ ., data = data.frame(traininglist[i]), method = "gbm", trainControl = control, importance = TRUE, preProcess=c("center","scale"), tuneLenght=15)
+  prediction1 <- predict(rf,testing)
+  performance1 <- postResample(prediction1,testing$Volume)
+  resultsGBM <- cbind(performance1,resultsGBM)
+}  
+
+resultsGBM
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#END OF CODE #END OF CODE #END OF CODE #END OF CODE #END OF CODE #END OF CODE #END OF CODE #END OF CODE 
+##################################################################################################################
+##################################################################################################################
+
+#run a second random forest without the removed variables to check the new weights
+set.seed(123)
+control <- trainControl(method="repeatedcv", number=10, repeats=3)
+rf <- train(Volume ~ ., data = existingproducts, method = "rf", importance = TRUE, preProcess=c("center","scale"))
+rf
 
 #save the results of the weighting after the first randomforest
 varweights <- varImp(rf) 
@@ -69,27 +243,138 @@ dfweights
 
 #order the index of each variable according the relevance - decreasing
 indicesorden <- order(dfweights$Overall, decreasing = TRUE)
+indicesorden
 
-#remove the variables with less than 2% of appeareance
+#remove the variables with less than 5% of appeareance
 for (i in indicesorden){
-  if (dfweights$Overall[i] > 101){
+  if (dfweights$Overall[i] < 5){
     deletevariable <- (rownames(dfweights)[i])
     n <- names(existingproducts)
+    n
     nameindex <- which(n == deletevariable)
     existingproducts[,nameindex] <- NULL
     
-  } else if (dfweights$Overall[i] < 2){
-    deletevariable <- (rownames(dfweights)[i])
+  } #else if (dfweights$Overall[i] > 15){
+    #deletevariable <- (rownames(dfweights)[i])
+    #n <- names(existingproducts)
+    #nameindex <- which(n == deletevariable)
+    #existingproducts[,nameindex] <- NULL
+  #}
+}
+
+
+#selectiong the the most significant vairiable according to a RF model using all attributes
+for (i in indicesorden){
+  if (dfweights$Overall[i] == 100){
+    mostimportantant <- (rownames(dfweights)[i])
     n <- names(existingproducts)
-    nameindex <- which(n == deletevariable)
-    existingproducts[,nameindex] <- NULL
+    nameindex <- which(n == mostimportantant)
   }
 }
 
+mostimportantant
+existingproducts[,nameindex]
+
+#linearmodel of "THE MOST IMPORTANT VARIABLE" against Volume
+lm <- lm(existingproducts[,nameindex] ~ Volume, existingproducts)
+summary(lm) #no aparent correlation, we keep the variable.
+
+
+
+
+#trying to do reccursive random forest
+#run a second random forest without the variables removed to check the new weights
+set.seed(123)
+rf <- train(Volume ~ ., data = existingproducts, method = "rf", importance = TRUE)
+rf
+
+
+
+
+
+
+
+
+#inicia el data frame#
+dfinicial <- data.frame()
+data.frame[j] <- existingproducts[1]
+
+
+existingproducts[1]
+
+dfinicial
+dfweights
+indicesorden <- order(dfweights$Overall, decreasing = TRUE)
 indicesorden
 
-dfinicial <- data.frame(existingproducts$indices)
-dfagregado
+###############
+n <- names(existingproducts)
+n
+appendvariable <- colnames(existingproducts[14])
+appendvariable
+nameindex <- which(n == appendvariable)
+nameindex
+dfinicial <- cbind(existingproducts[,nameindex])
+dfinicial
+
+###############
+for (j in 1:4){
+  n <- names(existingproducts)
+  appendvariable <- rownames(dfweights)[indicesorden[j]]
+  nameindex <- which(n == appendvariable)
+  dfinicial <- cbind(dfinicial,existingproducts[,nameindex])
+}        
+
+dfinicial <- data.frame(dfinicial)
+dfinicial$X1 <- NULL
+dfinicial
+
+colnames(dfinicial[1])
+
+rownames(dfweights)[indicesorden[17]]
+
+colnames(dfinicial[1])
+
+setnames(dfinicial, old = c(colnames(dfinicial[1]),colnames(dfinicial[2]),colnames(dfinicial[3]),colnames(dfinicial[4]), new = c('anew','dnew',"pewpew","lalala")))
+
+
+
+
+
+
+
+j <- 0
+while (j <= 3){
+  for (i in indicesorden){
+    n <- names(existingproducts)
+    print(n)
+    appendvariable <- (rownames(dfweights)[i])
+    appendvariable
+    nameindex <- which(n == appendvariable)
+    nameindex
+    dfinicial <- cbind(existingproducts, existingproducts[,nameindex])
+    dfinicial
+  }
+}
+    
+
+for (i in indicesorden){
+  while (j <= 3){
+    n <- names(existingproducts)
+    print(n)
+    appendvariable <- (rownames(dfweights)[i])
+    appendvariable
+    nameindex <- which(n == appendvariable)
+    nameindex
+    dfinicial <- cbind(existingproducts, existingproducts[,nameindex])
+    dfinicial
+    
+    j <- j + 1
+  }
+}
+dfinicial
+
+cbind()
 
 dfweights$Overall[17]
 dfweights$Overall[13]
