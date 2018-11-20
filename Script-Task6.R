@@ -87,8 +87,9 @@ existingproducts$x1StarReviews <- NULL
 existingproducts$NegativeServiceReview <- NULL
 
 #checking a decision tree
+
 set.seed(123)
-rp <- rpart(Volume ~ ., existingproducts)
+rp <- rpart(Volume ~ ., existingproducts, cp =.02)
 summary(rp)
 rpart.plot(rp, type = 1)
 
@@ -155,70 +156,115 @@ traininglist <- list(traininglist1,traininglist2,traininglist3,traininglist4,tra
 traininglist
 
 length(traininglist)
-resultsRF <- c()
+resultsMLR <- c()
+resultsRF  <- c()
 resultsSVM <- c()
-resultsGBM <- c()
+resultsGBT <- c()
 
 #Train Control for the models
 control <- trainControl(method="repeatedcv", number=10, repeats=3)
 
+#MULTIPLE LINEAR MODEL
+for (i in 1:length(traininglist)){
+  if (i == 1){
+    resultsMLR <- c()
+    modelsMLR <-c()
+  }
+  set.seed(123)
+  rf <- train(Volume ~ ., data = data.frame(traininglist[i]), method = "lm", preProcess=c("center","scale"))
+  modelsMLR <- cbind(modelsMLR,rf)
+  prediction1 <- predict(rf,testing)
+  performance1 <- postResample(prediction1,testing$Volume)
+  resultsMLR <- cbind(resultsMLR,performance1)
+}
+colnames(resultsMLR) <- c("MLR Model 1V","MLR Model 2V","MLR Model 3V","MLR Model 4V","MLR Model 5V","MLR Model 6V")
+colnames(modelsMLR) <- c("RF Model 1V","RF Model 2V","RF Model 3V","RF Model 4V","RF Model 5V","RF Model 6V")
+resultsMLR
+modelsMLR
+
 #RANDOM FOREST
 for (i in 1:length(traininglist)){
+  if (i == 1){
+    resultsRF <- c()
+    modelsRF <-c()
+  }
   set.seed(123)
-  rf <- train(Volume ~ ., data = data.frame(traininglist[i]), method = "rf", trainControl = control, importance = TRUE, preProcess=c("center","scale"), tuneLenght=15)
+  rf <- train(Volume ~ ., data = data.frame(traininglist[i]), method = "rf", trainControl = control, importance = TRUE, preProcess=c("center","scale"), tuneLenght=5)
+  modelsRF <- cbind(modelsRF,rf)
   prediction1 <- predict(rf,testing)
   performance1 <- postResample(prediction1,testing$Volume)
   resultsRF <- cbind(resultsRF,performance1)
 }
-
+colnames(resultsRF) <- c("RF Model 1V","RF Model 2V","RF Model 3V","RF Model 4V","RF Model 5V","RF Model 6V")
+colnames(modelsRF) <- c("RF Model 1V","RF Model 2V","RF Model 3V","RF Model 4V","RF Model 5V","RF Model 6V")
 resultsRF
+modelsRF
 
 #SVM
 for (i in 1:length(traininglist)){
+  if (i == 1){
+    resultsSVM <- c()
+    modelsSVM <-c()
+  }
   set.seed(123)
-  rf <- train(Volume ~ ., data = data.frame(traininglist[i]), method = "svmRadial", trainControl = control, importance = TRUE, preProcess=c("center","scale"), tuneLenght=15)
+  rf <- train(Volume ~ ., data = data.frame(traininglist[i]), method = "svmRadial", trainControl = control, importance = TRUE, preProcess=c("center","scale"), tuneLenght=5)
+  modelsSVM <- cbind(modelsSVM,rf)
   prediction1 <- predict(rf,testing)
   performance1 <- postResample(prediction1,testing$Volume)
   resultsSVM <- cbind(resultsSVM,performance1)
 }
-
+colnames(resultsSVM) <- c("SVM Model 1V","SVM Model 2V","SVM Model 3V","SVM Model 4V","SVM Model 5V","SVM Model 6V")
+colnames(modelsSVM) <- c("SVM Model 1V","SVM Model 2V","SVM Model 3V","SVM Model 4V","SVM Model 5V","SVM Model 6V")
 resultsSVM
+modelsSVM
 
 #GBM
-for (i in 6:length(traininglist)){
+for (i in 1:length(traininglist)){
+  if (i == 1){
+    resultsGBT <- c()
+    modelsGBT <-c()
+  }
   set.seed(123)
-  rf <- train(Volume ~ ., data = data.frame(traininglist[i]), method = "gbm", trainControl = control, importance = TRUE, preProcess=c("center","scale"), tuneLenght=15)
+  rf <- train(Volume ~ ., data = data.frame(traininglist[i]), method = "xgbTree", trainControl = control, importance = TRUE, preProcess=c("center","scale"), tuneLenght=5)
+  modelsGBT <- cbind(modelsGBT,rf)
   prediction1 <- predict(rf,testing)
   performance1 <- postResample(prediction1,testing$Volume)
-  resultsGBM <- cbind(performance1,resultsGBM)
+  resultsGBT <- cbind(resultsGBT,performance1)
 }  
 
-resultsGBM
+colnames(resultsGBT) <- c("GBT Model 1V","GBT Model 2V","GBT Model 3V","GBT Model 4V","GBT Model 5V","GBT Model 6V")
+colnames(modelsGBT) <- c("GBT Model 1V","GBT Model 2V","GBT Model 3V","GBT Model 4V","GBT Model 5V","GBT Model 6V")
+resultsGBT
+modelsGBT
 
 
+resultsMLR
+resultsRF
+resultsSVM
+resultsGBT
+
+#BEST MODELS
+randomforestselected <- train(Volume ~ ., data = data.frame(traininglist[3]), method = "rf", trainControl = control, importance = TRUE, preProcess=c("center","scale"), tuneLenght=5)
+svmselected <- train(Volume ~ ., data = data.frame(traininglist[3]), method = "svmRadial", trainControl = control, importance = TRUE, preProcess=c("center","scale"), tuneLenght=5)  
+gbtselected <- train(Volume ~ ., data = data.frame(traininglist[3]), method = "xgbTree", trainControl = control, importance = TRUE, preProcess=c("center","scale"), tuneLenght=5)
 
 
+predictionRF <- predict(randomforestselected,newproducts)
+predictionSVM <- predict(svmselected,newproducts)
+predictiongbt <- predict(gbtselected,newproducts)
+
+predictionRF
+predictionSVM
+predictiogbt
 
 
+newpredictionlist <- c()
+newpredictionlist <- cbind(data.frame(newproducts$ProductType),data.frame(newproducts$ProductNum),predictionRF,predictionSVM,predictiongbt)
+newpredictionlist
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+write.csv(newpredictionlist, file="C2.T3output.csv", row.names = TRUE)
+write.csv(newpredictionlist, file="C2.T3output.csv", row.names = TRUE)
 
 
 
@@ -226,6 +272,22 @@ resultsGBM
 #END OF CODE #END OF CODE #END OF CODE #END OF CODE #END OF CODE #END OF CODE #END OF CODE #END OF CODE 
 ##################################################################################################################
 ##################################################################################################################
+##################################################################################################################
+##################################################################################################################
+##################################################################################################################
+##################################################################################################################
+##################################################################################################################
+##################################################################################################################
+##################################################################################################################
+##################################################################################################################
+##################################################################################################################
+##################################################################################################################
+##################################################################################################################
+##################################################################################################################
+##################################################################################################################
+##################################################################################################################
+
+#RANDOM STUFF
 
 #run a second random forest without the removed variables to check the new weights
 set.seed(123)
@@ -289,12 +351,6 @@ rf <- train(Volume ~ ., data = existingproducts, method = "rf", importance = TRU
 rf
 
 
-
-
-
-
-
-
 #inicia el data frame#
 dfinicial <- data.frame()
 data.frame[j] <- existingproducts[1]
@@ -336,11 +392,6 @@ rownames(dfweights)[indicesorden[17]]
 colnames(dfinicial[1])
 
 setnames(dfinicial, old = c(colnames(dfinicial[1]),colnames(dfinicial[2]),colnames(dfinicial[3]),colnames(dfinicial[4]), new = c('anew','dnew',"pewpew","lalala")))
-
-
-
-
-
 
 
 j <- 0
@@ -431,9 +482,6 @@ summary(rp)
 rpart.plot(rp, type = 1)
 
 
-
-
-
 #END OF CODE
 #######################################################
 #######################################################
@@ -451,7 +499,6 @@ rpart.plot(rp, type = 1)
 #######################################################
 #######################################################
 #######################################################
-
 
 #checking the data distribution# Basic histogram
 for (i in 1:ncol(existingproducts)) { #each columns index
